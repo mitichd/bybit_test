@@ -30,7 +30,6 @@ class TradingEngine:
         self.is_running = False
         self.config = None
         self.start_time = None
-        self.last_position_size = 0
 
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -100,7 +99,7 @@ class TradingEngine:
 
     def _run_trading_loop(self):
         """Основний цикл торгівлі"""
-        self.logger.info("\n�� ЗАПУСК ТРЕЙДИНГОВОГО ДВИЖКА")
+        self.logger.info("\n🚀 ЗАПУСК ТРЕЙДИНГОВОГО ДВИЖКА")
         self.logger.info("=" * 50)
 
         current_price = self.get_current_price(self.config['symbol'])
@@ -198,8 +197,6 @@ class TradingEngine:
         api_symbol = get_api_symbol(symbol)
         api_side = get_tp_side(side)
 
-        self.logger.info(f"🎯 Розміщуємо {len(tp_orders)} TP ордерів...")
-
         for i, tp_order in enumerate(tp_orders):
             try:
                 tp_price = calculate_tp_price(current_price, tp_order['price_percent'], side)
@@ -218,10 +215,12 @@ class TradingEngine:
                     timeInForce=TradingConstants.TIME_IN_FORCE_GTC
                 )
 
-                self.logger.info(f"✅ TP ордер {i+1}: {tp_order['price_percent']}% -> {format_price(tp_price)} ({format_quantity(qty)})")
+                self.logger.info(
+                    f"TP {i + 1}: {tp_order['price_percent']}% = ${tp_price:,.2f} ({format_quantity(qty)})")
+                self.logger.info(f"✅ TP {i + 1} перераховано")
 
             except Exception as e:
-                self.logger.error(f"❌ Помилка TP ордера {i+1}: {e}")
+                self.logger.error(f"❌ Помилка TP ордера {i + 1}: {e}")
 
     def place_dca_orders(self, config, current_price):
         """Розміщення DCA ордерів"""
@@ -235,7 +234,8 @@ class TradingEngine:
         range_percent = limit_orders['range_percent']
         orders_count = limit_orders['orders_count']
 
-        self.logger.info(f"📊 Розміщуємо {orders_count} DCA ордерів в діапазоні {range_percent}%...")
+        self.logger.info(f"📊 Ставимо DCA ордери для {symbol}...")
+        self.logger.info(f"  Діапазон: {range_percent}%, Кількість: {orders_count}")
 
         dca_prices = calculate_dca_prices(current_price, range_percent, orders_count, side)
 
@@ -256,69 +256,82 @@ class TradingEngine:
                     timeInForce=TradingConstants.TIME_IN_FORCE_GTC
                 )
 
-                self.logger.info(f"✅ DCA ордер {i+1}: {format_price(order_price)} ({format_quantity(qty)})")
+                self.logger.info(f"  DCA {i + 1}: ${order_price:,.2f} ({format_quantity(qty)})")
+                self.logger.info(f"  ✅ DCA {i + 1} поставлено")
 
             except Exception as e:
-                self.logger.error(f"❌ Помилка DCA ордера {i+1}: {e}")
+                self.logger.error(f"❌ Помилка DCA ордера {i + 1}: {e}")
 
     def monitor_positions(self, api_symbol):
-        """Моніторинг поточних позицій"""
+        """Моніторинг з DCA логікою"""
         try:
-            positions = self.session.get_positions(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
+            # Отримуємо поточну позицію
+            current_position = self.get_current_position_info(api_symbol)
 
-            if positions['retCode'] == 0:
-                position_list = positions['result']['list']
-                if position_list and float(position_list[0]['size']) > 0:
-                    current_size = float(position_list[0]['size'])
-                    self.logger.info(f"📊 Позиція активна: {format_quantity(current_size)}")
+            if current_position:
+                self.logger.info(f"\n📊 ПОЗИЦІЯ: {format_quantity(current_position['size'])}")
+                self.logger.info(f"💰 Середня ціна: ${current_position['avg_price']:,.2f}")
+                self.logger.info(f"📈 PnL: ${current_position['unrealised_pnl']:,.2f}")
 
-                    # Перевіряємо чи збільшився розмір позиції
-                    if current_size > self.last_position_size and self.last_position_size > 0:
-                        self.logger.info("🔄 DCA ордер виконався! Перераховуємо TP ордери...")
-                        self.recalculate_tp_orders(api_symbol)
+                # Перевіряємо виконані ордери
+                executed_orders = self.check_executed_orders(api_symbol)
 
-                    self.last_position_size = current_size
+                if executed_orders:
+                    self.logger.info(f"🔄 Виконано {len(executed_orders)} ордерів")
 
-                    # Показуємо активні ордери
-                    orders = self.session.get_open_orders(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
-                    if orders['retCode'] == 0:
-                        order_list = orders['result']['list']
-                        self.logger.info(f"📋 Активних ордерів: {len(order_list)}")
-                else:
-                    self.logger.info("�� Позиція не знайдена")
-                    self.last_position_size = 0
-            else:
-                self.logger.error(f"❌ Помилка отримання позицій: {positions}")
+                    # Розраховуємо нову середню ціну
+                    new_avg_price = self.calculate_new_avg_price(current_position, executed_orders)
+
+                    if new_avg_price != current_position['avg_price']:
+                        self.logger.info(f"🔄 Нова середня ціна: ${new_avg_price:,.2f}")
+                        self.logger.info(
+                            f"↔️ Середня ціна змінилася: ${current_position['avg_price']:,.2f} → ${new_avg_price:,.2f}")
+
+                        # Перераховуємо TP ордери
+                        self.recalculate_tp_orders(self.config, new_avg_price)
+
+            return current_position
 
         except Exception as e:
             self.logger.error(f"❌ Помилка моніторингу: {e}")
-
-    def recalculate_tp_orders(self, api_symbol):
-        """Перерахунок TP ордерів"""
-        try:
-            self.cancel_tp_orders(api_symbol)
-            new_avg_price = self.calculate_new_avg_price(self.config['symbol'])
-            if new_avg_price:
-                self.place_tp_orders(self.config, new_avg_price)
-        except Exception as e:
-            self.logger.error(f"❌ Помилка перерахунку TP ордерів: {e}")
-
-    def calculate_new_avg_price(self, symbol):
-        """Розрахунок нової середньої ціни"""
-        try:
-            api_symbol = get_api_symbol(symbol)
-            positions = self.session.get_positions(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
-
-            if positions['retCode'] == 0:
-                position_list = positions['result']['list']
-                if position_list and float(position_list[0]['size']) > 0:
-                    avg_price = float(position_list[0]['avgPrice'])
-                    self.logger.info(f"📊 Нова середня ціна: {format_price(avg_price)}")
-                    return avg_price
             return None
-        except Exception as e:
-            self.logger.error(f"❌ Помилка розрахунку середньої ціни: {e}")
-            return None
+
+    def recalculate_tp_orders(self, config, new_avg_price):
+        """Перерахунок TP ордерів з новою середньою ціною"""
+        symbol = config['symbol']
+        side = config['side']
+        total_amount = config['market_order_amount']
+
+        # Конвертуємо side
+        api_side = get_tp_side(side)
+        api_symbol = get_api_symbol(symbol)
+
+        self.logger.info(f"🎯 Перераховуємо TP ордери з новою ціною: ${new_avg_price:,.2f}")
+
+        # Скасовуємо старі TP ордери
+        self.cancel_tp_orders(api_symbol)
+
+        # Ставимо нові TP ордери
+        for i, tp in enumerate(config['tp_orders']):
+            tp_price = calculate_tp_price(new_avg_price, tp['price_percent'], side)
+            tp_amount = total_amount * (tp['quantity_percent'] / 100)
+            tp_qty = calculate_quantity(tp_amount, new_avg_price)
+
+            self.logger.info(f"TP {i + 1}: {tp['price_percent']}% = ${tp_price:,.2f} ({format_quantity(tp_qty)})")
+
+            try:
+                self.session.place_order(
+                    category=TradingConstants.CATEGORY_LINEAR,
+                    symbol=api_symbol,
+                    side=api_side,
+                    orderType=TradingConstants.ORDER_TYPE_LIMIT,
+                    qty=str(tp_qty),
+                    price=str(round(tp_price, 2)),
+                    timeInForce=TradingConstants.TIME_IN_FORCE_GTC
+                )
+                self.logger.info(f"✅ TP {i + 1} перераховано")
+            except Exception as e:
+                self.logger.error(f"❌ Помилка TP {i + 1}: {e}")
 
     def cancel_tp_orders(self, api_symbol):
         """Скасування всіх Limit ордерів (TP + DCA)"""
@@ -327,13 +340,13 @@ class TradingEngine:
             if orders['retCode'] == 0:
                 order_list = orders['result']['list']
                 for order in order_list:
-                    if order['orderType'] == 'Limit':
+                    if order['orderType'] == TradingConstants.ORDER_TYPE_LIMIT:
                         self.session.cancel_order(
                             category=TradingConstants.CATEGORY_LINEAR,
                             symbol=api_symbol,
                             orderId=order['orderId']
                         )
-                        self.logger.info(f"❌ Скасовано ордер: {order['orderId']}")
+                        self.logger.info(f"🗑️ Скасовано TP ордер: {order['orderId']}")
         except Exception as e:
             self.logger.error(f"❌ Помилка скасування ордерів: {e}")
 
@@ -424,3 +437,66 @@ class TradingEngine:
         if orders['retCode'] == 0:
             return orders['result']['list']
         return []
+
+    def get_current_position_info(self, api_symbol):
+        """Отримання поточної інформації про позицію"""
+        try:
+            positions = self.session.get_positions(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
+
+            for pos in positions['result']['list']:
+                if float(pos['size']) > 0:
+                    return {
+                        'size': float(pos['size']),
+                        'avg_price': float(pos['avgPrice']),
+                        'unrealised_pnl': float(pos['unrealisedPnl'])
+                    }
+            return None
+
+        except Exception as e:
+            self.logger.error(f"❌ Помилка отримання позиції: {e}")
+            return None
+
+    def check_executed_orders(self, api_symbol):
+        """Перевірка виконаних ордерів"""
+        try:
+            # Отримуємо історію ордерів
+            order_history = self.session.get_order_history(
+                category=TradingConstants.CATEGORY_LINEAR,
+                symbol=api_symbol,
+                limit=50
+            )
+
+            executed_orders = []
+
+            # Перевіряємо виконані ордери
+            for order in order_history['result']['list']:
+                if order['orderStatus'] == 'Filled':
+                    executed_orders.append(order)
+
+            return executed_orders
+
+        except Exception as e:
+            self.logger.error(f"❌ Помилка перевірки ордерів: {e}")
+            return []
+
+    def calculate_new_avg_price(self, current_position, executed_orders):
+        """Розрахунок нової середньої ціни"""
+        if not current_position or not executed_orders:
+            return current_position['avg_price'] if current_position else 0
+
+        total_size = current_position['size']
+        total_value = current_position['size'] * current_position['avg_price']
+
+        # Додаємо виконані ордери
+        for order in executed_orders:
+            order_size = float(order['qty'])
+            order_price = float(order['avgPrice'])
+
+            total_size += order_size
+            total_value += order_size * order_price
+
+        if total_size > 0:
+            new_avg_price = total_value / total_size
+            return new_avg_price
+
+        return current_position['avg_price']

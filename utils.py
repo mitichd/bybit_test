@@ -116,11 +116,13 @@ def calculate_dca_prices(current_price, range_percent, orders_count, side):
         list: Список цін для DCA ордерів
     """
     if side == "short":
-        min_price = current_price * (1 - range_percent / 100)
-        max_price = current_price
-    else:
+        # Для short: DCA ордери вище поточної ціни (щоб купувати дешевше)
         min_price = current_price
         max_price = current_price * (1 + range_percent / 100)
+    else:
+        # Для long: DCA ордери нижче поточної ціни (щоб купувати дешевше)
+        min_price = current_price * (1 - range_percent / 100)
+        max_price = current_price
 
     # Розраховуємо крок між ордерами
     price_step = (max_price - min_price) / (orders_count - 1)
