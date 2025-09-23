@@ -125,7 +125,7 @@ class TradingEngine:
         """Отримання поточної ціни активу"""
         try:
             api_symbol = get_api_symbol(symbol)
-            response = self.session.get_tickers(category="linear", symbol=api_symbol)
+            response = self.session.get_tickers(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
 
             if response['retCode'] == 0 and response['result']['list']:
                 price = float(response['result']['list'][0]['lastPrice'])
@@ -154,7 +154,7 @@ class TradingEngine:
             # Встановлюємо leverage
             try:
                 self.session.set_leverage(
-                    category="linear",
+                    category=TradingConstants.CATEGORY_LINEAR,
                     symbol=api_symbol,
                     buyLeverage=str(leverage),
                     sellLeverage=str(leverage)
@@ -174,12 +174,12 @@ class TradingEngine:
             self.logger.info(f"💰 Сума: ${amount}, Ціна: {format_price(current_price)}, Кількість: {format_quantity(qty)}")
 
             order = self.session.place_order(
-                category="linear",
+                category=TradingConstants.CATEGORY_LINEAR,
                 symbol=api_symbol,
                 side=api_side,
-                orderType="Market",
+                orderType=TradingConstants.ORDER_TYPE_MARKET,
                 qty=str(qty),
-                timeInForce="IOC"
+                timeInForce=TradingConstants.TIME_IN_FORCE_IOC
             )
 
             self.logger.info(f"✅ Позиція відкрита: {order}")
@@ -209,13 +209,13 @@ class TradingEngine:
                 )
 
                 order = self.session.place_order(
-                    category="linear",
+                    category=TradingConstants.CATEGORY_LINEAR,
                     symbol=api_symbol,
                     side=api_side,
-                    orderType="Limit",
+                    orderType=TradingConstants.ORDER_TYPE_LIMIT,
                     qty=str(qty),
                     price=str(round(tp_price, 2)),
-                    timeInForce="GTC"
+                    timeInForce=TradingConstants.TIME_IN_FORCE_GTC
                 )
 
                 self.logger.info(f"✅ TP ордер {i+1}: {tp_order['price_percent']}% -> {format_price(tp_price)} ({format_quantity(qty)})")
@@ -247,13 +247,13 @@ class TradingEngine:
                 )
 
                 order = self.session.place_order(
-                    category="linear",
+                    category=TradingConstants.CATEGORY_LINEAR,
                     symbol=api_symbol,
                     side=api_side,
-                    orderType="Limit",
+                    orderType=TradingConstants.ORDER_TYPE_LIMIT,
                     qty=str(qty),
                     price=str(order_price),
-                    timeInForce="GTC"
+                    timeInForce=TradingConstants.TIME_IN_FORCE_GTC
                 )
 
                 self.logger.info(f"✅ DCA ордер {i+1}: {format_price(order_price)} ({format_quantity(qty)})")
@@ -264,7 +264,7 @@ class TradingEngine:
     def monitor_positions(self, api_symbol):
         """Моніторинг поточних позицій"""
         try:
-            positions = self.session.get_positions(category="linear", symbol=api_symbol)
+            positions = self.session.get_positions(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
 
             if positions['retCode'] == 0:
                 position_list = positions['result']['list']
@@ -280,7 +280,7 @@ class TradingEngine:
                     self.last_position_size = current_size
 
                     # Показуємо активні ордери
-                    orders = self.session.get_open_orders(category="linear", symbol=api_symbol)
+                    orders = self.session.get_open_orders(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
                     if orders['retCode'] == 0:
                         order_list = orders['result']['list']
                         self.logger.info(f"📋 Активних ордерів: {len(order_list)}")
@@ -307,7 +307,7 @@ class TradingEngine:
         """Розрахунок нової середньої ціни"""
         try:
             api_symbol = get_api_symbol(symbol)
-            positions = self.session.get_positions(category="linear", symbol=api_symbol)
+            positions = self.session.get_positions(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
 
             if positions['retCode'] == 0:
                 position_list = positions['result']['list']
@@ -323,13 +323,13 @@ class TradingEngine:
     def cancel_tp_orders(self, api_symbol):
         """Скасування всіх Limit ордерів (TP + DCA)"""
         try:
-            orders = self.session.get_open_orders(category="linear", symbol=api_symbol)
+            orders = self.session.get_open_orders(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
             if orders['retCode'] == 0:
                 order_list = orders['result']['list']
                 for order in order_list:
                     if order['orderType'] == 'Limit':
                         self.session.cancel_order(
-                            category="linear",
+                            category=TradingConstants.CATEGORY_LINEAR,
                             symbol=api_symbol,
                             orderId=order['orderId']
                         )
@@ -346,7 +346,7 @@ class TradingEngine:
             api_symbol = get_api_symbol(self.config['symbol'])
             side = self.config['side']
 
-            positions = self.session.get_positions(category="linear", symbol=api_symbol)
+            positions = self.session.get_positions(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
 
             if positions['retCode'] == 0:
                 position_list = positions['result']['list']
@@ -357,12 +357,12 @@ class TradingEngine:
                     self.logger.info(f"🔄 Закриваємо позицію: {format_quantity(position_size)}")
 
                     close_order = self.session.place_order(
-                        category="linear",
+                        category=TradingConstants.CATEGORY_LINEAR,
                         symbol=api_symbol,
                         side=close_side,
-                        orderType="Market",
+                        orderType=TradingConstants.ORDER_TYPE_MARKET,
                         qty=str(position_size),
-                        timeInForce="IOC"
+                        timeInForce=TradingConstants.TIME_IN_FORCE_IOC
                     )
 
                     if close_order['retCode'] == 0:
@@ -376,7 +376,7 @@ class TradingEngine:
     def cancel_all_orders(self, api_symbol):
         """Скасування всіх ордерів"""
         try:
-            orders = self.session.get_open_orders(category="linear", symbol=api_symbol)
+            orders = self.session.get_open_orders(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
 
             if orders['retCode'] == 0:
                 order_list = orders['result']['list']
@@ -385,7 +385,7 @@ class TradingEngine:
                     for order in order_list:
                         try:
                             self.session.cancel_order(
-                                category="linear",
+                                category=TradingConstants.CATEGORY_LINEAR,
                                 symbol=api_symbol,
                                 orderId=order['orderId']
                             )
@@ -410,7 +410,7 @@ class TradingEngine:
         if not self.config:
             return []
         api_symbol = get_api_symbol(self.config['symbol'])
-        positions = self.session.get_positions(category="linear", symbol=api_symbol)
+        positions = self.session.get_positions(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
         if positions['retCode'] == 0:
             return positions['result']['list']
         return []
@@ -420,7 +420,7 @@ class TradingEngine:
         if not self.config:
             return []
         api_symbol = get_api_symbol(self.config['symbol'])
-        orders = self.session.get_open_orders(category="linear", symbol=api_symbol)
+        orders = self.session.get_open_orders(category=TradingConstants.CATEGORY_LINEAR, symbol=api_symbol)
         if orders['retCode'] == 0:
             return orders['result']['list']
         return []
