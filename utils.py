@@ -22,15 +22,22 @@ def setup_logging():
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
 
+    # Створюємо handler для файлу
+    file_handler = logging.FileHandler('logs/trading.log', encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+
     # Створюємо formatter
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+    # Застосовуємо formatter до обох handler'ів
     console_handler.setFormatter(formatter)
+    file_handler.setFormatter(formatter)
 
-    # Додаємо handler до логера
+    # Додаємо handler'и до логера
     logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
 
     return logger
 
