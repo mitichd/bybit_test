@@ -10,10 +10,19 @@ class TradingConstants:
     # Налаштування моніторингу
     MONITORING_INTERVAL = 10  # секунди
 
-    # Налаштування API
-    API_TIMEOUT = 30  # секунди
-
     # Статуси движка
     STATUS_RUNNING = "running"
     STATUS_STOPPED = "stopped"
     STATUS_ERROR = "error"
+
+    # Початковий розмір позиції для відстеження
+    INITIAL_POSITION_SIZE = 0
+
+    # Типи ордерів
+    ORDER_TYPE_MARKET = "Market"
+    ORDER_TYPE_LIMIT = "Limit"
+    TIME_IN_FORCE_IOC = "IOC"
+    TIME_IN_FORCE_GTC = "GTC"
+
+    # Категорії торгівлі
+    CATEGORY_LINEAR = "linear"
